@@ -136,7 +136,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { firstName, lastName, email, password } = await request.json()
+    const { firstName, lastName, email, password, schoolId } = await request.json()
 
     // 1. Create auth user
     const { data: authData, error: signUpError } = await adminSupabase.auth.admin.createUser({
@@ -158,7 +158,8 @@ export async function POST(request: Request) {
         email,
         first_name: firstName,
         last_name: lastName,
-        role: 'teacher'
+        role: 'teacher',
+        school_id: schoolId
       })
 
     if (userError) {

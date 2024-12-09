@@ -1,31 +1,53 @@
 // components/EditTeacherModal.tsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { 
+  Select,
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select"
+import { useSupabase } from '@/components/supabase-provider'
 import type { Users } from '@/lib/types/supabase'
 
 interface EditTeacherModalProps {
-  teacher: Users | null
+  teacher: Teacher | null
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
 }
 
+interface School {
+  id: string
+  name: string
+  address?: string
+}
+
+interface Teacher extends Users {
+  school_id?: string
+}
+
 export function EditTeacherModal({ teacher, isOpen, onClose, onSuccess }: EditTeacherModalProps) {
+  const { supabase } = useSupabase()
   const [firstName, setFirstName] = useState(teacher?.first_name || '')
   const [lastName, setLastName] = useState(teacher?.last_name || '')
   const [email, setEmail] = useState(teacher?.email || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-
+  const [schools, setSchools] = useState<School[]>([])
+  const [selectedSchool, setSelectedSchool] = useState(teacher?.school_id || '')
+  
   // Update state when teacher prop changes
-  useState(() => {
+  useEffect(() => {
     if (teacher) {
       setFirstName(teacher.first_name)
       setLastName(teacher.last_name)
       setEmail(teacher.email)
+      setSelectedSchool(teacher.school_id || '')
     }
   }, [teacher])
 
@@ -46,6 +68,7 @@ export function EditTeacherModal({ teacher, isOpen, onClose, onSuccess }: EditTe
           firstName,
           lastName,
           email,
+          schoolId: selectedSchool
         }),
       })
 
@@ -64,6 +87,23 @@ export function EditTeacherModal({ teacher, isOpen, onClose, onSuccess }: EditTe
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    const fetchSchools = async () => {
+      const { data } = await supabase
+        .from('schools')
+        .select('id, name')
+        .order('name')
+      
+      if (data) {
+        setSchools(data)
+      }
+    }
+
+    if (isOpen) {
+      fetchSchools()
+    }
+  }, [isOpen])
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -105,6 +145,28 @@ export function EditTeacherModal({ teacher, isOpen, onClose, onSuccess }: EditTe
               required
             />
           </div>
+          <div className="space-y-2">
+          <Label htmlFor="school">School</Label>
+          <Select 
+            value={selectedSchool} 
+            onValueChange={setSelectedSchool}
+          >
+            <SelectTrigger className="bg-gray-700 border-gray-600 text-gray-100">
+              <SelectValue placeholder="Select a school" />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-800 border-gray-700">
+              {schools.map((school) => (
+                <SelectItem 
+                  key={school.id} 
+                  value={school.id}
+                  className="text-gray-100 focus:bg-gray-700"
+                >
+                  {school.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
           {error && (
             <p className="text-red-400 text-sm">{error}</p>
           )}

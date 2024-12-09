@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Pencil, Trash2, BookOpen } from 'lucide-react'
+import { Plus, Pencil, Trash2, BookOpen, School } from 'lucide-react'
 import { useSupabase } from '@/components/supabase-provider'
 import type { Users } from '@/lib/types/supabase'
 import { AddTeacherModal } from '@/components/AddTeacherModal'
@@ -11,49 +11,131 @@ import { EditTeacherModal } from '@/components/EditTeacherModal'
 import { ManageTeacherClasses } from '@/components/ManageTeacherClasses'
 import { useRouter } from 'next/navigation'
 
-interface Teacher extends Users {
-  role: 'teacher'
+// Define proper types for the response data
+interface ClassData {
+  id: string
+  name: string
+  class_students: { count: number }[]
+}
+
+interface SchoolData {
+  id: string
+  name: string
 }
 
 interface TeacherWithClasses extends Users {
-  classes?: {
-    id: string;
-    name: string;
-    class_students: [{
-      count: number;
-    }];
-  }[];
+  school: SchoolData[] | null
+  classes: ClassData[] | null
 }
 
+interface TeacherData extends Users {
+  school_details: {
+    id: string
+    name: string
+  } | null
+  teaching_classes: {
+    id: string
+    name: string
+    student_count: number
+  }[]
+}
+
+interface TransformedTeacher {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  role: 'teacher'
+  school: SchoolData | null
+  classes: ClassData[] | null
+  created_at: string
+  updated_at: string
+  encrypted_password: string | null
+}
 
 export default function TeachersPage() {
-  const { user } = useSupabase()
-  const [teachers, setTeachers] = useState<TeacherWithClasses[]>([])
+  const { supabase } = useSupabase()
+  const [teachers, setTeachers] = useState<TeacherData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [editingTeacher, setEditingTeacher] = useState<Users | null>(null)
-  const [managingClassesFor, setManagingClassesFor] = useState<Users | null>(null)
+  const [editingTeacher, setEditingTeacher] = useState<TeacherData | null>(null)
+  const [managingClassesFor, setManagingClassesFor] = useState<TeacherData | null>(null)
   const router = useRouter()
 
   const fetchTeachers = async () => {
-    setLoading(true)
-    setError(null)
-  
     try {
-      const response = await fetch('/api/teachers')
-      const data = await response.json()
-  
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch teachers')
-      }
-  
-      setTeachers(data.teachers)
+      setLoading(true)
+      setError(null)
+
+      // First fetch teachers with their school details
+      const { data: teachersData, error: teachersError } = await supabase
+        .from('users')
+        .select(`
+          *,
+          school_details:school_id(
+            id,
+            name
+          )
+        `)
+        .eq('role', 'teacher')
+
+      if (teachersError) throw teachersError
+
+      // Then fetch class information for each teacher
+      const teachersWithClasses = await Promise.all(
+        teachersData.map(async (teacher) => {
+          const { data: classesData, error: classesError } = await supabase
+            .from('classes')
+            .select(`
+              id,
+              name,
+              class_students (count)
+            `)
+            .eq('teacher_id', teacher.id)
+
+          if (classesError) throw classesError
+
+          return {
+            ...teacher,
+            teaching_classes: classesData.map(cls => ({
+              id: cls.id,
+              name: cls.name,
+              student_count: cls.class_students?.[0]?.count || 0
+            }))
+          }
+        })
+      )
+
+      setTeachers(teachersWithClasses)
     } catch (err) {
       console.error('Error fetching teachers:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch teachers')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDeleteTeacher = async (teacherId: string) => {
+    if (!confirm('Are you sure you want to delete this teacher?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/teachers/${teacherId}`, {
+        method: 'DELETE',
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete teacher')
+      }
+
+      await fetchTeachers()
+    } catch (err) {
+      console.error('Error deleting teacher:', err)
+      alert(err instanceof Error ? err.message : 'Failed to delete teacher')
     }
   }
 
@@ -123,57 +205,41 @@ export default function TeachersPage() {
                     <BookOpen size={16} />
                   </Button>
                   <Button 
-  variant="ghost" 
-  size="icon" 
-  className="text-gray-400 hover:text-red-400"
-  onClick={async () => {
-    if (!confirm('Are you sure you want to delete this teacher?')) {
-      return;
-    }
-
-    try {
-      console.log('Attempting to delete teacher:', teacher.id);
-      
-      const response = await fetch(`/api/teachers/${teacher.id}`, {
-        method: 'DELETE',
-      });
-      
-      const data = await response.json();
-      console.log('Delete response:', data);
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to delete teacher');
-      }
-
-      fetchTeachers();
-    } catch (err) {
-      console.error('Error deleting teacher:', err);
-      alert(err instanceof Error ? err.message : 'Failed to delete teacher');
-    }
-  }}
->
-  <Trash2 size={16} />
-</Button>
+                    variant="ghost" 
+                    size="icon" 
+                    className="text-gray-400 hover:text-red-400"
+                    onClick={() => handleDeleteTeacher(teacher.id)}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   <p className="text-sm text-gray-400">{teacher.email}</p>
-                  {/* Add Classes Section */}
+                  <div className="flex items-center gap-2">
+                    <School className="h-4 w-4 text-gray-500" />
+                    <p className="text-sm text-gray-400">
+                      {teacher.school_details?.name || 'No school assigned'}
+                    </p>
+                  </div>
                   <div className="mt-3 pt-3 border-t border-gray-700">
                     <h4 className="text-sm font-medium text-gray-300 mb-2">
                       Assigned Classes
                     </h4>
-                    {teacher.classes && teacher.classes.length > 0 ? (
+                    {teacher.teaching_classes.length > 0 ? (
                       <div className="space-y-1.5">
-                        {teacher.classes.map(cls => (
-                      <div 
-                      key={cls.id} 
-                      className="text-sm text-gray-400 px-2.5 py-1.5 bg-gray-700/50 rounded-md flex items-center justify-between"
-                      onClick={() => router.push(`/dashboard/classes?selected=${cls.id}`)}
-                    >
-                      <span>{cls.name}</span>
-                    </div>
+                        {teacher.teaching_classes.map(cls => (
+                          <div 
+                            key={cls.id} 
+                            className="text-sm text-gray-400 px-2.5 py-1.5 bg-gray-700/50 rounded-md flex items-center justify-between cursor-pointer hover:bg-gray-700"
+                            onClick={() => router.push(`/dashboard/classes?selected=${cls.id}`)}
+                          >
+                            <span>{cls.name}</span>
+                            <span className="text-xs text-gray-500">
+                              {cls.student_count} students
+                            </span>
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -211,5 +277,5 @@ export default function TeachersPage() {
         />
       )}
     </div>
-  );
+  )
 }
