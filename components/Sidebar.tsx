@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { BookOpen, Calendar, ClipboardList, FileSpreadsheet, Home, LogOut, Settings, Users } from 'lucide-react'
+import { BookOpen, Calendar, ClipboardList, FileSpreadsheet, Home, LogOut, Settings, Users, Building } from 'lucide-react'
 import { useSupabase } from '@/components/supabase-provider'
 
 const teacherLinks = [
@@ -24,13 +24,21 @@ const adminLinks = [
   { name: 'School Overview', href: '/dashboard/overview', icon: ClipboardList },
 ]
 
+// In your Sidebar component
+const superAdminLinks = [
+  ...adminLinks,
+  { name: 'Schools', href: '/dashboard/schools', icon: Building }
+]
+
+
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { supabase, user } = useSupabase()
   const [isAdmin, setIsAdmin] = useState(false)
-  
+  const [isSuperAdmin, setSuperAdmin] = useState(false) 
+
   useEffect(() => {
     if (!user) return
 
@@ -44,6 +52,7 @@ export default function Sidebar() {
         }
 
         setIsAdmin(data.role === 'admin')
+        setSuperAdmin(data.role === 'super_admin')
       } catch (error) {
         console.error('Error checking role:', error)
       }
@@ -63,8 +72,11 @@ export default function Sidebar() {
   }
 
   // Use correct links based on admin status
-  const links = isAdmin ? adminLinks : teacherLinks
-
+  const links = isAdmin
+  ? adminLinks 
+  : isSuperAdmin 
+    ? superAdminLinks 
+    : teacherLinks
   return (
     <div className={cn(
       "flex flex-col border-r border-gray-700 bg-gray-800/40 backdrop-blur-xl transition-all duration-300",

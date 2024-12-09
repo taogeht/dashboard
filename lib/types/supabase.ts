@@ -175,6 +175,29 @@ export interface Database {
           updated_at?: string
         }
       }
+      schools: {
+        Row: {
+          id: string
+          name: string
+          address: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          address?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          address?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -220,3 +243,4 @@ export interface GradeStats {
   graded: number
   ungraded: number
 }
+
