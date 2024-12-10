@@ -87,7 +87,66 @@ export function EditTeacherModal({ teacher, isOpen, onClose, onSuccess }: EditTe
       setLoading(false)
     }
   }
-
+  async function cascadeSchoolAssignment(
+    teacherId: string,
+    schoolId: string | null,
+    supabase: any
+  ) {
+    try {
+      // Start a transaction
+      const { error: teacherError } = await supabase
+        .from('users')
+        .update({ school_id: schoolId })
+        .eq('id', teacherId)
+  
+      if (teacherError) throw teacherError
+  
+      // Get all classes taught by this teacher
+      const { data: classes, error: classesError } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('teacher_id', teacherId)
+  
+      if (classesError) throw classesError
+  
+      if (classes && classes.length > 0) {
+        const classIds = classes.map(c => c.id)
+  
+        // Update all of teacher's classes to the new school
+        const { error: updateClassesError } = await supabase
+          .from('classes')
+          .update({ school_id: schoolId })
+          .in('id', classIds)
+  
+        if (updateClassesError) throw updateClassesError
+  
+        // Get all students in these classes
+        const { data: students, error: studentsError } = await supabase
+          .from('class_students')
+          .select('student_id')
+          .in('class_id', classIds)
+  
+        if (studentsError) throw studentsError
+  
+        if (students && students.length > 0) {
+          const studentIds = [...new Set(students.map(s => s.student_id))]
+  
+          // Update all students in these classes to the new school
+          const { error: updateStudentsError } = await supabase
+            .from('students')
+            .update({ school_id: schoolId })
+            .in('id', studentIds)
+  
+          if (updateStudentsError) throw updateStudentsError
+        }
+      }
+  
+      return { success: true }
+    } catch (error) {
+      console.error('Error in cascading school assignment:', error)
+      throw error
+    }
+  }
   useEffect(() => {
     const fetchSchools = async () => {
       const { data } = await supabase
