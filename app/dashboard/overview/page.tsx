@@ -104,7 +104,7 @@ export default function SchoolOverview() {
 
         // Calculate average grade per class
         const classGrades = (gradesData || []).reduce<Record<string, number[]>>((acc, grade) => {
-          const className = grade.classes?.name
+          const className = grade.classes?.[0]?.name
           if (className && grade.score !== null) {
             if (!acc[className]) {
               acc[className] = []

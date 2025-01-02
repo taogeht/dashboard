@@ -1,12 +1,10 @@
-'use client'
-
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Plus, Pencil, Trash2, School, Users, BookOpen } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Plus, Pencil, Trash2, School, Users, BookOpen, Loader2 } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useSupabase } from '@/components/supabase-provider'
 
 interface School {
@@ -27,18 +25,11 @@ interface SchoolFormData {
   address: string
 }
 
-interface SchoolRecord {
-    id: string
-    name: string
-    address?: string  // Made optional
-    created_at: string
-    updated_at: string
-  }
-
 export default function SchoolsManagement() {
   const { supabase } = useSupabase()
   const [schools, setSchools] = useState<School[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingSchool, setEditingSchool] = useState<School | null>(null)
@@ -47,54 +38,33 @@ export default function SchoolsManagement() {
     address: ''
   })
 
-
   const fetchSchools = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      // Fetch schools and their related counts using RPC
       const { data: schoolsData, error: schoolsError } = await supabase
         .from('schools')
-        .select('*')
+        .select(`
+          *,
+          users:users(id),
+          classes:classes(id),
+          students:students(id)
+        `)
         .order('name')
 
       if (schoolsError) throw schoolsError
 
-      // For each school, fetch related counts
-      const schoolsWithStats = await Promise.all(
-        schoolsData.map(async (school) => {
-          // Count teachers (users with role 'teacher')
-          const { count: teacherCount } = await supabase
-            .from('users')
-            .select('*', { count: 'exact', head: true })
-            .eq('school_id', school.id)
-            .eq('role', 'teacher')
+      const transformedSchools = (schoolsData || []).map(school => ({
+        ...school,
+        stats: {
+          teachers: school.users?.length || 0,
+          classes: school.classes?.length || 0,
+          students: school.students?.length || 0
+        }
+      }))
 
-          // Count classes
-          const { count: classCount } = await supabase
-            .from('classes')
-            .select('*', { count: 'exact', head: true })
-            .eq('school_id', school.id)
-
-          // Count students
-          const { count: studentCount } = await supabase
-            .from('students')
-            .select('*', { count: 'exact', head: true })
-            .eq('school_id', school.id)
-
-          return {
-            ...school,
-            stats: {
-              teachers: teacherCount || 0,
-              classes: classCount || 0,
-              students: studentCount || 0
-            }
-          }
-        })
-      )
-
-      setSchools(schoolsWithStats)
+      setSchools(transformedSchools)
     } catch (err) {
       console.error('Error fetching schools:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch schools')
@@ -103,70 +73,70 @@ export default function SchoolsManagement() {
     }
   }
 
-  useEffect(() => {
-    fetchSchools()
-  }, [])
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!formData.name.trim()) {
+      setError('School name is required')
+      return
+    }
+  
     try {
-      setLoading(true)
+      setSaving(true)
       setError(null)
 
       const schoolData = {
-        name: formData.name, 
-        ...(formData.address ? { address: formData.address } : {})
+        name: formData.name.trim(),
+        address: formData.address.trim() || null
       }
-  if (editingSchool) {
+  
+      if (editingSchool) {
         const { error: updateError } = await supabase
           .from('schools')
           .update(schoolData)
           .eq('id', editingSchool.id)
-
+  
         if (updateError) throw updateError
       } else {
         const { error: insertError } = await supabase
           .from('schools')
           .insert(schoolData)
-
+  
         if (insertError) throw insertError
       }
+  
       await fetchSchools()
-      setShowAddModal(false)
-      setEditingSchool(null)
-      setFormData({ name: '', address: '' })
+      handleCloseModal()
     } catch (err) {
       console.error('Error saving school:', err)
       setError(err instanceof Error ? err.message : 'Failed to save school')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
   const handleDelete = async (schoolId: string) => {
-    if (!confirm('Are you sure you want to delete this school? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete this school? This will remove all associations.')) {
       return
     }
 
     try {
-        setLoading(true)
-        setError(null)
-  
-        // First update all related records to remove the school_id
-// Inside handleDelete function
-await Promise.all([
-    // For users table
-    supabase.from('users').update({
-      email: undefined,
-      first_name: undefined,
-      last_name: undefined,
-      role: undefined
-    }).eq('school_id', schoolId),
-    
-    // For classes and students, you'll need to check their specific type definitions
-    supabase.from('classes').update({ teacher_id: undefined }).eq('school_id', schoolId),
-    supabase.from('students').update({ email: undefined }).eq('school_id', schoolId)
-  ]);
+      setLoading(true)
+      setError(null)
+
+      // First update associated records
+      await Promise.all([
+        supabase.from('users')
+          .update({ school_id: null })
+          .eq('school_id', schoolId),
+        supabase.from('classes')
+          .update({ school_id: null })
+          .eq('school_id', schoolId),
+        supabase.from('students')
+          .update({ school_id: null })
+          .eq('school_id', schoolId)
+      ])
+
       // Then delete the school
       const { error: deleteError } = await supabase
         .from('schools')
@@ -175,7 +145,7 @@ await Promise.all([
 
       if (deleteError) throw deleteError
 
-      await fetchSchools()
+      setSchools(prev => prev.filter(school => school.id !== schoolId))
     } catch (err) {
       console.error('Error deleting school:', err)
       setError(err instanceof Error ? err.message : 'Failed to delete school')
@@ -184,9 +154,16 @@ await Promise.all([
     }
   }
 
-  if (loading) {
-    return <div className="text-gray-100">Loading schools...</div>
+  const handleCloseModal = () => {
+    setShowAddModal(false)
+    setEditingSchool(null)
+    setFormData({ name: '', address: '' })
+    setError(null)
   }
+
+  useEffect(() => {
+    fetchSchools()
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -202,13 +179,19 @@ await Promise.all([
       </div>
 
       {error && (
-        <div className="text-red-400 bg-red-900/20 border border-red-800 p-4 rounded-lg">
+        <div className="text-red-400 bg-red-900/20 border border-red-800 p-4 rounded-lg flex items-center gap-2">
+          <span className="sr-only">Error:</span>
           {error}
         </div>
       )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {schools.length === 0 ? (
+        {loading && schools.length === 0 ? (
+          <div className="col-span-full flex justify-center items-center py-12 text-gray-400">
+            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+            Loading schools...
+          </div>
+        ) : schools.length === 0 ? (
           <div className="col-span-full text-center text-gray-400 py-12">
             No schools found. Add your first school to get started.
           </div>
@@ -234,6 +217,7 @@ await Promise.all([
                     className="text-gray-400 hover:text-gray-100"
                   >
                     <Pencil size={16} />
+                    <span className="sr-only">Edit {school.name}</span>
                   </Button>
                   <Button 
                     variant="ghost" 
@@ -242,6 +226,7 @@ await Promise.all([
                     className="text-gray-400 hover:text-red-400"
                   >
                     <Trash2 size={16} />
+                    <span className="sr-only">Delete {school.name}</span>
                   </Button>
                 </div>
               </CardHeader>
@@ -280,7 +265,7 @@ await Promise.all([
         )}
       </div>
 
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+      <Dialog open={showAddModal} onOpenChange={handleCloseModal}>
         <DialogContent className="bg-gray-800 text-gray-100 border-gray-700">
           <DialogHeader>
             <DialogTitle>
@@ -295,6 +280,7 @@ await Promise.all([
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 className="bg-gray-700 border-gray-600 text-gray-100"
+                placeholder="Enter school name"
                 required
               />
             </div>
@@ -306,6 +292,7 @@ await Promise.all([
                 value={formData.address}
                 onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
                 className="bg-gray-700 border-gray-600 text-gray-100"
+                placeholder="Enter school address (optional)"
               />
             </div>
 
@@ -313,21 +300,24 @@ await Promise.all([
               <Button 
                 type="button" 
                 variant="ghost" 
-                onClick={() => {
-                  setShowAddModal(false)
-                  setEditingSchool(null)
-                  setFormData({ name: '', address: '' })
-                }}
+                onClick={handleCloseModal}
                 className="border-gray-600 hover:bg-gray-700"
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={saving}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                {loading ? 'Saving...' : editingSchool ? 'Save Changes' : 'Add School'}
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {editingSchool ? 'Saving...' : 'Creating...'}
+                  </>
+                ) : (
+                  editingSchool ? 'Save Changes' : 'Create School'
+                )}
               </Button>
             </div>
           </form>

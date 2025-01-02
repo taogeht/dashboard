@@ -17,7 +17,8 @@ export interface Database {
           encrypted_password: string | null
           first_name: string
           last_name: string
-          role: 'teacher' | 'admin'
+          role: 'super_admin' | 'school_admin' | 'teacher'
+          school_id: string | null
           created_at: string
           updated_at: string
         }
@@ -27,7 +28,8 @@ export interface Database {
           encrypted_password?: string | null
           first_name: string
           last_name: string
-          role: 'teacher' | 'admin'
+          role: 'super_admin' | 'school_admin' | 'teacher'
+          school_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -37,7 +39,31 @@ export interface Database {
           encrypted_password?: string | null
           first_name?: string
           last_name?: string
-          role?: 'teacher' | 'admin'
+          role?: 'super_admin' | 'school_admin' | 'teacher'
+          school_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      schools: {
+        Row: {
+          id: string
+          name: string
+          address: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          address?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          address?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -48,6 +74,7 @@ export interface Database {
           name: string
           description: string | null
           teacher_id: string
+          school_id: string | null
           created_at: string
           updated_at: string
         }
@@ -56,6 +83,7 @@ export interface Database {
           name: string
           description?: string | null
           teacher_id: string
+          school_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -64,6 +92,7 @@ export interface Database {
           name?: string
           description?: string | null
           teacher_id?: string
+          school_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -73,8 +102,8 @@ export interface Database {
           id: string
           first_name: string
           last_name: string
-          email: string
           date_of_birth: string | null
+          school_id: string | null
           created_at: string
           updated_at: string
         }
@@ -82,8 +111,8 @@ export interface Database {
           id?: string
           first_name: string
           last_name: string
-          email: string
           date_of_birth?: string | null
+          school_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -91,8 +120,8 @@ export interface Database {
           id?: string
           first_name?: string
           last_name?: string
-          email?: string
           date_of_birth?: string | null
+          school_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -149,7 +178,7 @@ export interface Database {
           class_id: string
           student_id: string
           assignment_name: string
-          score: number | null
+          score: number
           date: string
           created_at: string
           updated_at: string
@@ -159,7 +188,7 @@ export interface Database {
           class_id: string
           student_id: string
           assignment_name: string
-          score: number | null
+          score: number
           date: string
           created_at?: string
           updated_at?: string
@@ -169,31 +198,8 @@ export interface Database {
           class_id?: string
           student_id?: string
           assignment_name?: string
-          score?: number | null
+          score?: number
           date?: string
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      schools: {
-        Row: {
-          id: string
-          name: string
-          address: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          address?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          address?: string
           created_at?: string
           updated_at?: string
         }
@@ -218,12 +224,14 @@ export type Updates<T extends keyof Database['public']['Tables']> = Database['pu
 
 // Specific table types for easier usage
 export type Users = Tables<'users'>
+export type Schools = Tables<'schools'>
 export type Classes = Tables<'classes'>
 export type Students = Tables<'students'>
 export type ClassStudents = Tables<'class_students'>
 export type Attendance = Tables<'attendance'>
 export type Grades = Tables<'grades'>
 
+// Additional type definitions for grades
 export interface StudentGrade {
   student_id: string
   first_name: string
@@ -243,4 +251,3 @@ export interface GradeStats {
   graded: number
   ungraded: number
 }
-

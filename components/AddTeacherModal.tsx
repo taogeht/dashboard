@@ -22,6 +22,7 @@ interface AddTeacherModalProps {
 interface School {
   id: string
   name: string
+  schoolId: string | undefined
 }
 
 
@@ -81,11 +82,16 @@ export function AddTeacherModal({ isOpen, onClose, onSuccess }: AddTeacherModalP
 
 useEffect(() => {
     const fetchSchools = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('schools')
         .select('id, name')
         .order('name')
       
+      if (error) {
+        console.error('Error fetching schools:', error)
+        return
+      }
+
       if (data) {
         setSchools(data)
         if (data.length === 1) {

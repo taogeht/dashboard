@@ -25,19 +25,16 @@ export async function POST(request: Request) {
     for (const row of rows) {
       if (!row.trim()) continue // Skip empty rows
       
-      const [first_name, last_name, email] = row.split(',').map(field => field.trim())
+      const [first_name, last_name] = row.split(',').map(field => field.trim())
       
       // Skip rows without first name
       if (!first_name) continue
 
-      // Create student object with required fields
-      const student: any = {
+      // Create student object with just name fields
+      const student = {
         first_name,
-        last_name: last_name || '-', // Provide default value for last_name
+        last_name: last_name || '-' // Provide default value for last_name
       }
-
-      // Generate email if not provided (since it's required in the database)
-      student.email = email?.trim() || `${first_name.toLowerCase()}${last_name ? '.' + last_name.toLowerCase() : ''}.${Date.now().toString(36)}@student.edu`
 
       students.push(student)
     }

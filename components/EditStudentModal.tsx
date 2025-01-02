@@ -14,13 +14,14 @@ interface EditStudentModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
+  schoolId: string | undefined
 }
+
 
 export function EditStudentModal({ student, isOpen, onClose, onSuccess }: EditStudentModalProps) {
   const { supabase } = useSupabase()
   const [firstName, setFirstName] = useState(student?.first_name || '')
   const [lastName, setLastName] = useState(student?.last_name || '')
-  const [email, setEmail] = useState(student?.email || '')
   const [classes, setClasses] = useState<Classes[]>([])
   const [selectedClasses, setSelectedClasses] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -30,7 +31,6 @@ export function EditStudentModal({ student, isOpen, onClose, onSuccess }: EditSt
     if (student) {
       setFirstName(student.first_name)
       setLastName(student.last_name || '')
-      setEmail(student.email || '')
       fetchStudentClasses()
       fetchAvailableClasses()
     }
@@ -80,7 +80,6 @@ export function EditStudentModal({ student, isOpen, onClose, onSuccess }: EditSt
       const updateData = {
         first_name: firstName.trim(),
         ...(lastName.trim() && { last_name: lastName.trim() }),
-        ...(email.trim() && { email: email.trim() })
       }
       
       const { error: updateError } = await supabase
@@ -162,17 +161,6 @@ export function EditStudentModal({ student, isOpen, onClose, onSuccess }: EditSt
                 className="bg-gray-700 border-gray-600 text-gray-100"
               />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email (Optional)</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="bg-gray-700 border-gray-600 text-gray-100"
-            />
           </div>
 
           <div className="space-y-2">

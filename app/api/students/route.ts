@@ -1,7 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import type { Database } from '@/lib/types/supabase'
-
 
 const adminSupabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,51 +12,29 @@ const adminSupabase = createClient(
   }
 )
 
-interface StudentWithClasses {
-    id: string
-    first_name: string
-    last_name: string
-    email: string
-    class_students: {
-      class: {
-        id: string
-        name: string
-      }
-    }[]
-  }
+export async function GET() {
+  try {
+    const { data: students, error } = await adminSupabase
+      .from('students')
+      .select('*')
+      .order('last_name')
 
-// Helper function to generate a unique email
-const generateEmail = (firstName: string, lastName: string = '') => {
-  const base = `${firstName.toLowerCase()}${lastName ? '.' + lastName.toLowerCase() : ''}`
-  const timestamp = Date.now().toString(36) // Add timestamp to ensure uniqueness
-  return `${base}.${timestamp}@student.edu`
+    if (error) throw error
+
+    return NextResponse.json({ students })
+  } catch (error) {
+    console.error('Server error:', error)
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to fetch students' },
+      { status: 500 }
+    )
+  }
 }
 
-export async function GET(request: Request) {
-    try {
-      const { data, error } = await adminSupabase
-        .rpc('get_students_with_classes')
-  
-      if (error) throw error
-  
-      return NextResponse.json({ 
-        students: data || [] 
-      })
-    } catch (error) {
-      console.error('Server error:', error)
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : 'Failed to fetch students' },
-        { status: 500 }
-      )
-    }
-  }
-
 export async function POST(request: Request) {
-  console.log('Adding new student...')
-  
   try {
     const body = await request.json()
-    const { first_name, last_name, email } = body
+    const { first_name, last_name } = body
 
     if (!first_name?.trim()) {
       return NextResponse.json(
@@ -67,19 +43,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create the student record
-    const studentData: any = {
+    // Create the student record with just name fields
+    const studentData = {
       first_name: first_name.trim(),
-      // Generate email if not provided
-      email: email?.trim() || generateEmail(first_name, last_name)
+      last_name: last_name?.trim() || '-'
     }
 
-    // Add last name if provided
-    if (last_name?.trim()) {
-      studentData.last_name = last_name.trim()
-    }
-
-    console.log('Processing data:', studentData)
+    console.log('Processing student data:', studentData)
 
     const { data: student, error } = await adminSupabase
       .from('students')

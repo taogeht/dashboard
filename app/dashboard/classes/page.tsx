@@ -1,98 +1,47 @@
 'use client'
-
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Plus, Users, Pencil, Trash2 } from 'lucide-react'
 import { useSupabase } from '@/components/supabase-provider'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { useSchool } from '@/context/SchoolContext'
 import type { Classes, Students } from '@/lib/types/supabase'
 import { AddClassModal } from '@/components/AddClassModal'
 import { EditClassModal } from '@/components/EditClassModal'
 
-interface DatabaseStudent {
+interface ClassWithStudents extends Classes {
+  students: Students[]
+  teacher?: {
     id: string
     first_name: string
     last_name: string
     email: string
-    date_of_birth: string | null
-    created_at: string
-    updated_at: string
   }
-  
-  interface DatabaseClass {
-    id: string
-    name: string
-    description: string | null
-    teacher_id: string
-    created_at: string
-    updated_at: string
-    teacher: {
-      id: string
-      first_name: string
-      last_name: string
-      email: string
-    }
-    class_students: {
-      student: DatabaseStudent
-    }[]
-  }
-interface ClassWithStudentsAndTeacher extends Classes {
-    teacher: {
-      id: string
-      first_name: string
-      last_name: string
-      email: string
-    }
-    students: Students[]
-  }
-
-interface ClassWithStudents extends Classes {
-  students: Students[]
-}
-
-interface EditClassModalProps {
-  classItem: Classes
-  isOpen: boolean
-  onClose: () => void
-  onSave: (updatedClass: Classes) => void
-}
-
-interface AddClassModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onClassAdded: () => void
 }
 
 export default function ClassesPage() {
   const { supabase } = useSupabase()
-  const [classes, setClasses] = useState<ClassWithStudentsAndTeacher[]>([])
+  const { selectedSchool } = useSchool()
+  const [classes, setClasses] = useState<ClassWithStudents[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingClass, setEditingClass] = useState<Classes | null>(null)
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
-  const searchParams = new URLSearchParams(window.location.search)
-  const selectedFromUrl = searchParams.get('selected')
-
-  useEffect(() => {
-    if (selectedFromUrl) {
-      setSelectedClassId(selectedFromUrl)
-    }
-  }, [selectedFromUrl])
 
   const fetchClasses = async () => {
     try {
       setLoading(true)
+      setError(null)
       
+      // Get the current user's role and ID
       const { data: { user } } = await supabase.auth.getUser()
       
       if (!user) {
         throw new Error('No authenticated user')
       }
   
+      // Get the user's role from the users table
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('role')
@@ -101,6 +50,7 @@ export default function ClassesPage() {
   
       if (userError) throw userError
   
+      // Build the query based on role and selected school
       let query = supabase
         .from('classes')
         .select(`
@@ -115,29 +65,30 @@ export default function ClassesPage() {
             student:students(
               id,
               first_name,
-              last_name,
-              email
+              last_name
             )
           )
         `)
         .order('name')
   
+      // If user is a teacher, only show their classes
       if (userData.role === 'teacher') {
         query = query.eq('teacher_id', user.id)
       }
-  
-      const { data, error: fetchError } = await query as { 
-        data: DatabaseClass[] | null
-        error: any 
+
+      // If a school is selected, filter by school_id
+      if (selectedSchool) {
+        query = query.eq('school_id', selectedSchool.id)
       }
   
-      if (fetchError) throw fetchError
-      if (!data) throw new Error('No data returned')
+      const { data, error: fetchError } = await query
   
-      const transformedClasses: ClassWithStudentsAndTeacher[] = data.map(classData => ({
+      if (fetchError) throw fetchError
+  
+      const transformedClasses = (data || []).map(classData => ({
         ...classData,
-        teacher: classData.teacher,
-        students: classData.class_students.map(cs => cs.student)
+        teacher: classData.teacher ? classData.teacher[0] : undefined,
+        students: classData.class_students.map((cs: any) => cs.student)
       }))
   
       setClasses(transformedClasses)
@@ -148,6 +99,10 @@ export default function ClassesPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchClasses()
+  }, [selectedSchool]) // Refetch when selected school changes
 
   const handleUpdateClass = async (updatedClass: Classes) => {
     try {
@@ -189,14 +144,13 @@ export default function ClassesPage() {
     }
   }
 
-  useEffect(() => {
-    fetchClasses()
-  }, [])
-
   if (loading) {
-    return <div className="text-gray-100">Loading classes...</div>
+    return (
+      <div className="flex items-center justify-center h-64 text-gray-400">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400"></div>
+      </div>
+    )
   }
-
 
   return (
     <div className="space-y-6">
@@ -212,121 +166,114 @@ export default function ClassesPage() {
       </div>
 
       {error && (
-        <div className="text-red-400 text-sm">{error}</div>
+        <div className="bg-red-900/50 text-red-200 p-4 rounded-lg border border-red-800">
+          {error}
+        </div>
       )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {classes.length === 0 ? (
-          <div className="col-span-full text-center text-gray-400 py-12">
-            No classes found. Add your first class to get started.
+          <div className="col-span-full">
+            <Card className="bg-gray-800/50 border-gray-700">
+              <CardContent className="pt-6">
+                <div className="text-center space-y-3">
+                  {selectedSchool ? (
+                    <>
+                      <p className="text-gray-400">No classes found in {selectedSchool.name}.</p>
+                      <Button 
+                        onClick={() => setShowAddModal(true)}
+                        variant="ghost" 
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add your first class
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-gray-400">Select a school to view its classes.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         ) : (
-          classes.map((classItem: ClassWithStudentsAndTeacher) => (
+          classes.map((classItem) => (
+            <Card key={classItem.id} className="bg-gray-800 border-gray-700">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-lg font-medium text-gray-200">
+                  {classItem.name}
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="text-gray-400 hover:text-gray-100"
+                    onClick={() => setSelectedClassId(classItem.id === selectedClassId ? null : classItem.id)}
+                  >
+                    <Users size={16} />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="text-gray-400 hover:text-gray-100"
+                    onClick={() => setEditingClass(classItem)}
+                  >
+                    <Pencil size={16} />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="text-gray-400 hover:text-red-400"
+                    onClick={() => handleDeleteClass(classItem.id)}
+                  >
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {classItem.description && (
+                    <p className="text-sm text-gray-400">{classItem.description}</p>
+                  )}
+                  {classItem.teacher && (
+                    <p className="text-sm text-gray-400">
+                      Teacher: {classItem.teacher.first_name} {classItem.teacher.last_name}
+                    </p>
+                  )}
+                  <p className="text-sm text-gray-400">
+                    {classItem.students.length} student{classItem.students.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
 
-<Card key={classItem.id} className="bg-gray-800 border-gray-700">
-  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-    <div>
-      <CardTitle className="text-lg font-medium text-gray-200">
-        {classItem.name}
-      </CardTitle>
- 
-    </div>
-    <div className="flex gap-2">
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        className="text-gray-400 hover:text-gray-100"
-        onClick={() => setSelectedClassId(classItem.id === selectedClassId ? null : classItem.id)}
-      >
-        <Users size={16} />
-      </Button>
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        className="text-gray-400 hover:text-gray-100"
-        onClick={() => setEditingClass(classItem)}
-      >
-        <Pencil size={16} />
-      </Button>
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        className="text-gray-400 hover:text-red-400"
-        onClick={() => handleDeleteClass(classItem.id)}
-      >
-        <Trash2 size={16} />
-      </Button>
-    </div>
-  </CardHeader>
-  <CardContent>
-      <div className="space-y-2">
-        {classItem.description && (
-          <p className="text-sm text-gray-400">{classItem.description}</p>
-        )}
-        {classItem.teacher && (
-          <p className="text-sm text-gray-400">
-            Teacher: {classItem.teacher.first_name} {classItem.teacher.last_name}
-          </p>
-        )}
-        <p className="text-sm text-gray-400">
-          {classItem.students.length} student{classItem.students.length !== 1 ? 's' : ''}
-        </p>
-      </div>
-
-    {selectedClassId === classItem.id && (
-  <div className="mt-4 space-y-2">
-    <h3 className="text-sm font-medium text-gray-200">Enrolled Students</h3>
-    {classItem.students.length === 0 ? (
-      <p className="text-sm text-gray-400">No students enrolled</p>
-    ) : (
-      <div className="space-y-1">
-        {classItem.students.map((student) => (
-          <div 
-            key={student.id}
-            className="text-sm text-gray-400 flex justify-between items-center"
-          >
-            <span>{student.first_name} {student.last_name}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-gray-400 hover:text-red-400"
-              onClick={async () => {
-                if (!confirm('Are you sure you want to remove this student from the class?')) {
-                  return;
-                }
-
-                try {
-                  const response = await fetch(`/api/class-students`, {
-                    method: 'DELETE',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      studentId: student.id,
-                      classId: classItem.id
-                    })
-                  });
-
-                  if (!response.ok) {
-                    throw new Error('Failed to remove student from class');
-                  }
-
-                  // Refresh the classes data
-                  fetchClasses();
-                } catch (err) {
-                  console.error('Error removing student from class:', err);
-                  alert('Failed to remove student from class');
-                }
-              }}
-            >
-              Remove
-            </Button>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-)}
+                {selectedClassId === classItem.id && (
+                  <div className="mt-4 space-y-2">
+                    <h3 className="text-sm font-medium text-gray-200">Enrolled Students</h3>
+                    {classItem.students.length === 0 ? (
+                      <p className="text-sm text-gray-400">No students enrolled</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {classItem.students.map((student) => (
+                          <div 
+                            key={student.id}
+                            className="text-sm text-gray-400 flex justify-between items-center"
+                          >
+                            <span>{student.first_name} {student.last_name}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-gray-400 hover:text-red-400"
+                              onClick={() => {
+                                // Handle removing student from class
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))
@@ -334,24 +281,22 @@ export default function ClassesPage() {
       </div>
 
       {showAddModal && (
-  <AddClassModal
-    isOpen={showAddModal}
-    onClose={() => setShowAddModal(false)}
-    onClassAdded={() => {
-      fetchClasses()
-      setShowAddModal(false)
-    }}
-  />
+        <AddClassModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          onClassAdded={fetchClasses}
+          schoolId={selectedSchool?.id}
+        />
       )}
 
-{editingClass && (
-  <EditClassModal
-    classItem={editingClass}
-    isOpen={true}
-    onClose={() => setEditingClass(null)}
-    onSave={handleUpdateClass}
-  />
-)}
+      {editingClass && (
+        <EditClassModal
+          classItem={editingClass}
+          isOpen={true}
+          onClose={() => setEditingClass(null)}
+          onSave={handleUpdateClass}
+        />
+      )}
     </div>
   )
 }

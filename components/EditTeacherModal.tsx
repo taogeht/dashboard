@@ -19,16 +19,18 @@ interface EditTeacherModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
+  schoolId: string | undefined
 }
 
 interface School {
   id: string
   name: string
   address?: string
+  schoolId: string | undefined
 }
 
 interface Teacher extends Users {
-  school_id?: string
+  school_id: string | null
 }
 
 export function EditTeacherModal({ teacher, isOpen, onClose, onSuccess }: EditTeacherModalProps) {
@@ -155,7 +157,7 @@ export function EditTeacherModal({ teacher, isOpen, onClose, onSuccess }: EditTe
         .order('name')
       
       if (data) {
-        setSchools(data)
+        setSchools(data.map((school: any) => ({ ...school, schoolId: school.id })))
       }
     }
 

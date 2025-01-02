@@ -11,6 +11,7 @@ interface ManageTeacherClassesProps {
   isOpen: boolean
   onClose: () => void
   onUpdate: () => void
+  schoolId?: string
 }
 
 export function ManageTeacherClasses({ teacher, isOpen, onClose, onUpdate }: ManageTeacherClassesProps) {
@@ -59,7 +60,7 @@ export function ManageTeacherClasses({ teacher, isOpen, onClose, onUpdate }: Man
         // Unassign class from teacher
         const { error: updateError } = await supabase
           .from('classes')
-          .update({ teacher_id: null })
+          .update({ teacher_id: undefined })
           .eq('id', classId)
 
         if (updateError) throw updateError

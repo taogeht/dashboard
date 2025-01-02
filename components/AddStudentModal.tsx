@@ -1,41 +1,43 @@
-'use client'
-
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useSupabase } from '@/components/supabase-provider'
-import { Upload } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AlertCircle, Loader2 } from 'lucide-react'
 import Papa from 'papaparse'
-import type { Classes } from '@/lib/types/supabase'
 
 interface AddStudentModalProps {
   isOpen: boolean
   onClose: () => void
   onStudentAdded: () => void
+  schoolId?: string
 }
 
-export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentModalProps) {
+export function AddStudentModal({ isOpen, onClose, onStudentAdded, schoolId }: AddStudentModalProps) {
   const { supabase } = useSupabase()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
-  const [email, setEmail] = useState('')
   const [selectedClass, setSelectedClass] = useState<string>('')
   const [csvClass, setCsvClass] = useState<string>('')
-  const [classes, setClasses] = useState<Classes[]>([])
+  const [classes, setClasses] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchClasses = async () => {
     try {
-      const { data: classesData, error: classesError } = await supabase
+      let query = supabase
         .from('classes')
         .select('*')
         .order('name')
+
+      if (schoolId) {
+        query = query.eq('school_id', schoolId)
+      }
+
+      const { data: classesData, error: classesError } = await query
 
       if (classesError) throw classesError
       setClasses(classesData || [])
@@ -49,7 +51,7 @@ export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentM
     if (isOpen) {
       fetchClasses()
     }
-  }, [isOpen])
+  }, [isOpen, schoolId])
 
   const handleSingleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,24 +60,26 @@ export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentM
       setLoading(true)
       setError(null)
 
-      const { data: newStudent, error: studentError } = await supabase
+      // Create the student
+      const { data: student, error: studentError } = await supabase
         .from('students')
         .insert({
           first_name: firstName,
-          last_name: lastName || null,
-          email: email || null
+          last_name: lastName || '',
+          school_id: schoolId || ''
         })
         .select()
         .single()
 
       if (studentError) throw studentError
 
-      if (selectedClass && newStudent) {
+      // If a class is selected, enroll the student
+      if (selectedClass && student) {
         const { error: enrollError } = await supabase
           .from('class_students')
           .insert({
             class_id: selectedClass,
-            student_id: newStudent.id
+            student_id: student.id
           })
 
         if (enrollError) throw enrollError
@@ -83,11 +87,9 @@ export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentM
 
       setFirstName('')
       setLastName('')
-      setEmail('')
       setSelectedClass('')
       onStudentAdded()
       onClose()
-
     } catch (err) {
       console.error('Error adding student:', err)
       setError(err instanceof Error ? err.message : 'Failed to add student')
@@ -103,7 +105,7 @@ export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentM
     try {
       setLoading(true)
       setError(null)
-  
+
       const result = await new Promise<Papa.ParseResult<any>>((resolve, reject) => {
         Papa.parse(file, {
           header: true,
@@ -115,61 +117,48 @@ export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentM
           }
         })
       })
-  
+
       if (result.data.length === 0) {
         throw new Error('The CSV file is empty')
       }
-  
-      // Validate and clean data
-      const validStudents = result.data
+
+      // Transform the data - only include name fields
+      const students = result.data
         .map(row => ({
           first_name: row.first_name?.trim(),
-          last_name: row.last_name?.trim() || null,  // Changed to null
-          email: row.email?.trim() || null           // Changed to null
+          last_name: row.last_name?.trim() || '',
+          school_id: schoolId
         }))
-        .filter(student => student.first_name) // Remove any rows without first names
-  
-      if (validStudents.length === 0) {
-        throw new Error('No valid student data found. Each student must have a first name.')
-      }
-  
-      console.log('Preparing to insert students:', validStudents)
-  
-      // Insert all students
-      const { data: newStudents, error: studentsError } = await supabase
+        .filter(student => student.first_name) // Filter out rows without first name
+
+      // Insert the students
+      const { data: newStudents, error: insertError } = await supabase
         .from('students')
-        .insert(validStudents)
+        .insert(students)
         .select()
-  
-      if (studentsError) {
-        console.error('Database error:', studentsError)
-        throw new Error(`Database error: ${studentsError.message}`)
+
+      if (insertError) throw insertError
+
+      // Enroll students in the selected class
+      if (newStudents && newStudents.length > 0) {
+        const enrollments = newStudents.map(student => ({
+          class_id: csvClass,
+          student_id: student.id
+        }))
+
+        const { error: enrollError } = await supabase
+          .from('class_students')
+          .insert(enrollments)
+
+        if (enrollError) throw enrollError
       }
-  
-      if (!newStudents || newStudents.length === 0) {
-        throw new Error('Failed to create new students')
-      }
-  
-      // Enroll all new students in the selected class
-      const { error: enrollError } = await supabase
-        .from('class_students')
-        .insert(
-          newStudents.map(student => ({
-            class_id: csvClass,
-            student_id: student.id
-          }))
-        )
-  
-      if (enrollError) throw enrollError
-  
-      // Success!
+
       onStudentAdded()
       onClose()
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
+      if (e.target.files) {
+        e.target.value = ''
       }
       setCsvClass('')
-  
     } catch (err) {
       console.error('CSV Upload Error:', err)
       setError(err instanceof Error ? err.message : 'Failed to process CSV file')
@@ -184,6 +173,13 @@ export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentM
         <DialogHeader>
           <DialogTitle>Add Student(s)</DialogTitle>
         </DialogHeader>
+
+        {error && (
+          <div className="bg-red-900/50 p-3 rounded-lg flex items-center gap-2 text-red-200 border border-red-800">
+            <AlertCircle className="h-4 w-4" />
+            <span>{error}</span>
+          </div>
+        )}
         
         <Tabs defaultValue="single" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
@@ -210,17 +206,6 @@ export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentM
                   id="lastName"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="bg-gray-700 border-gray-600 text-gray-100"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email (Optional)</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
                   className="bg-gray-700 border-gray-600 text-gray-100"
                 />
               </div>
@@ -253,7 +238,14 @@ export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentM
                 disabled={loading || !firstName.trim()}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
-                {loading ? 'Adding...' : 'Add Student'}
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  'Add Student'
+                )}
               </Button>
             </form>
           </TabsContent>
@@ -289,20 +281,17 @@ export function AddStudentModal({ isOpen, onClose, onStudentAdded }: AddStudentM
                   id="csv"
                   type="file"
                   accept=".csv"
-                  ref={fileInputRef}
                   onChange={handleCSVUpload}
                   className="bg-gray-700 border-gray-600 text-gray-100"
                   disabled={!csvClass || loading}
                 />
                 <p className="text-xs text-gray-400">
-                  CSV should have columns: first_name (required), last_name, email
+                  CSV should have columns: first_name (required), last_name (optional)
                 </p>
               </div>
             </div>
           </TabsContent>
         </Tabs>
-
-        {error && <p className="text-red-400 text-sm mt-4">{error}</p>}
       </DialogContent>
     </Dialog>
   )

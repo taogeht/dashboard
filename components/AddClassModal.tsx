@@ -13,9 +13,10 @@ interface AddClassModalProps {
   isOpen: boolean
   onClose: () => void
   onClassAdded: () => void
+  schoolId?: string
 }
 
-export function AddClassModal({ isOpen, onClose, onClassAdded }: AddClassModalProps) {
+export function AddClassModal({ isOpen, onClose, onClassAdded, schoolId }: AddClassModalProps) {
   const { supabase } = useSupabase()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -26,11 +27,19 @@ export function AddClassModal({ isOpen, onClose, onClassAdded }: AddClassModalPr
 
   const fetchTeachers = async () => {
     try {
-      const { data: teachersData, error: teachersError } = await supabase
+      // Fetch teachers from the selected school
+      let query = supabase
         .from('users')
-        .select('id, first_name, last_name, email')
+        .select('id, first_name, last_name, email, encrypted_password, role, school_id, created_at, updated_at')
         .eq('role', 'teacher')
         .order('last_name')
+
+      // Filter teachers by school if schoolId is provided
+      if (schoolId) {
+        query = query.eq('school_id', schoolId)
+      }
+
+      const { data: teachersData, error: teachersError } = await query
 
       if (teachersError) throw teachersError
       setTeachers(teachersData || [])
@@ -44,7 +53,7 @@ export function AddClassModal({ isOpen, onClose, onClassAdded }: AddClassModalPr
     if (isOpen) {
       fetchTeachers()
     }
-  }, [isOpen])
+  }, [isOpen, schoolId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,7 +72,8 @@ export function AddClassModal({ isOpen, onClose, onClassAdded }: AddClassModalPr
         .insert({
           name,
           description: description || null,
-          teacher_id: teacherId
+          teacher_id: teacherId,
+          school_id: schoolId // Add school_id to the class
         })
 
       if (insertError) throw insertError

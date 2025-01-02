@@ -16,20 +16,7 @@ export async function GET() {
       )
     }
 
-    // Verify user is super_admin
-    const { data: userData } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (userData?.role !== 'super_admin') {
-      return NextResponse.json(
-        { error: 'Not authorized' },
-        { status: 403 }
-      )
-    }
-
+    // All authenticated users can read schools, so we remove the super_admin check
     const { data: schools, error } = await supabase
       .from('schools')
       .select(`
