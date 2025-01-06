@@ -1,3 +1,4 @@
+// components/SchoolSelector.tsx
 import { useSchool } from '@/context/SchoolContext'
 import {
   Select,
@@ -8,10 +9,25 @@ import {
 } from "@/components/ui/select"
 import { Loader2, School } from 'lucide-react'
 
-const ALL_SCHOOLS_VALUE = 'all_schools' // Special value for "All Schools" option
-
 export default function SchoolSelector() {
-  const { selectedSchool, setSelectedSchool, schools, loading, error } = useSchool()
+  const { 
+    selectedSchool, 
+    setSelectedSchool, 
+    schools, 
+    loading, 
+    error,
+    userRole 
+  } = useSchool()
+
+  // If school admin, don't show selector since they're locked to their school
+  if (userRole === 'school_admin') {
+    return (
+      <div className="flex items-center gap-2">
+        <School className="h-5 w-5 text-gray-400" />
+        <span className="text-gray-100">{selectedSchool?.name}</span>
+      </div>
+    )
+  }
 
   if (loading) {
     return (
@@ -30,13 +46,14 @@ export default function SchoolSelector() {
     )
   }
 
+  // Only super_admin can switch between schools
   return (
     <div className="flex items-center gap-2">
       <School className="h-5 w-5 text-gray-400" />
       <Select
-        value={selectedSchool?.id || ALL_SCHOOLS_VALUE}
+        value={selectedSchool?.id || 'all'}
         onValueChange={(value) => {
-          if (value === ALL_SCHOOLS_VALUE) {
+          if (value === 'all') {
             setSelectedSchool(null)
           } else {
             const school = schools.find(s => s.id === value)
@@ -50,12 +67,11 @@ export default function SchoolSelector() {
           />
         </SelectTrigger>
         <SelectContent className="bg-gray-800 border-gray-700">
-          <SelectItem 
-            value={ALL_SCHOOLS_VALUE}
-            className="text-gray-100"
-          >
-            All Schools
-          </SelectItem>
+          {userRole === 'super_admin' && (
+            <SelectItem value="all" className="text-gray-100">
+              All Schools
+            </SelectItem>
+          )}
           {schools.map((school) => (
             <SelectItem 
               key={school.id} 

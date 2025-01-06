@@ -58,23 +58,30 @@ export default function Sidebar() {
   const [userRole, setUserRole] = useState<'teacher' | 'school_admin' | 'super_admin' | null>(null)
 
   useEffect(() => {
-    if (!user) return
-
+    if (!user) {
+      console.log('No user found, skipping role check')
+      return
+    }
+  
     const checkRole = async () => {
+      console.log('Checking role for user:', user.id)
       try {
         const response = await fetch(`/api/user/role?userId=${user.id}`)
         const data = await response.json()
-
+  
+        console.log('Role check response:', data)
+  
         if (!response.ok) {
-          throw new Error(data.error)
+          throw new Error(data.error || 'Failed to fetch user role')
         }
-
+  
         setUserRole(data.role)
+        console.log('Role set successfully:', data.role)
       } catch (error) {
         console.error('Error checking role:', error)
       }
     }
-
+  
     checkRole()
   }, [user])
 

@@ -7,6 +7,10 @@ const adminSupabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Valid role types
+const validRoles = ['teacher', 'school_admin', 'super_admin'] as const
+type UserRole = typeof validRoles[number]
+
 export async function GET(request: Request) {
   try {
     // Get the user ID from the URL
@@ -27,6 +31,28 @@ export async function GET(request: Request) {
       console.error('Error fetching role:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    if (!data) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // Validate the role
+    if (!validRoles.includes(data.role as UserRole)) {
+      console.error('Invalid role found:', data.role)
+      return NextResponse.json(
+        { error: `Invalid role: ${data.role}` },
+        { status: 400 }
+      )
+    }
+
+    // Add debug logging
+    console.log('User role fetched successfully:', {
+      userId,
+      role: data.role
+    })
 
     return NextResponse.json({ role: data.role })
   } catch (error) {

@@ -44,7 +44,7 @@ export default function AttendanceClassSelect({ onClassSelect }: { onClassSelect
           )
         `)
         
-        if (userData.role !== 'admin') {
+        if (userData.role === 'teacher') {
           query = query.eq('teacher_id', user.id)
         }
 
@@ -53,9 +53,10 @@ export default function AttendanceClassSelect({ onClassSelect }: { onClassSelect
 
         if (classesError) throw classesError
 
-        // Process the data to include last attendance date
+        // Process the data to include last attendance date and format students
         const processedClasses = classesData?.map(classItem => ({
           ...classItem,
+          students: { count: classItem.students[0]?.count || 0 },
           last_attendance: classItem.attendance
             ?.map(a => a.date)
             .sort()

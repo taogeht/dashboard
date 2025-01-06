@@ -112,7 +112,7 @@ export function EditTeacherModal({ teacher, isOpen, onClose, onSuccess }: EditTe
       if (classesError) throw classesError
   
       if (classes && classes.length > 0) {
-        const classIds = classes.map(c => c.id)
+        const classIds: string[] = classes.map((c: { id: string }) => c.id)
   
         // Update all of teacher's classes to the new school
         const { error: updateClassesError } = await supabase
@@ -131,7 +131,7 @@ export function EditTeacherModal({ teacher, isOpen, onClose, onSuccess }: EditTe
         if (studentsError) throw studentsError
   
         if (students && students.length > 0) {
-          const studentIds = [...new Set(students.map(s => s.student_id))]
+            const studentIds: string[] = [...new Set<string>(students.map((s: { student_id: string }) => s.student_id))]
   
           // Update all students in these classes to the new school
           const { error: updateStudentsError } = await supabase

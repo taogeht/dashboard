@@ -1,4 +1,5 @@
 'use client'
+
 import { useState, useEffect } from 'react'
 import { useSupabase } from '@/components/supabase-provider'
 import SchoolAdminDashboard from '@/components/SchoolAdminDashboard'
@@ -14,7 +15,7 @@ interface School {
 interface UserData {
   role: string
   school_id: string | null
-  school: School[] | null
+  schools?: School
 }
 
 export default function DashboardPage() {
@@ -28,26 +29,30 @@ export default function DashboardPage() {
       if (!user) return
 
       try {
-        const { data, error } = await supabase
+        // First, get the user's role without joining schools
+        const { data: userData, error: userError } = await supabase
           .from('users')
-          .select(`
-            role,
-            school_id,
-            school:schools!inner (
-              id,
-              name
-            )
-          `)
+          .select('role, school_id')
           .eq('id', user.id)
           .single()
-            
-        if (error) throw error
-        const userData = data as UserData
-        setUserRole(userData.role)
+
+        if (userError) throw userError
         
-        // If user is a school_admin, automatically set their school
-        if (userData.role === 'school_admin' && userData.school?.[0]) {
-          setSelectedSchool(userData.school[0])
+        setUserRole(userData.role)
+
+        // If user is a school_admin and has a school_id, fetch the school details
+        if (userData.role === 'school_admin' && userData.school_id) {
+          const { data: schoolData, error: schoolError } = await supabase
+            .from('schools')
+            .select('id, name')
+            .eq('id', userData.school_id)
+            .single()
+
+          if (schoolError) throw schoolError
+
+          if (schoolData) {
+            setSelectedSchool(schoolData)
+          }
         }
       } catch (error) {
         console.error('Error checking role:', error)

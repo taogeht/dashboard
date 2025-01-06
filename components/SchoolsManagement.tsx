@@ -1,3 +1,5 @@
+'use client'
+
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -87,7 +89,7 @@ export default function SchoolsManagement() {
 
       const schoolData = {
         name: formData.name.trim(),
-        address: formData.address.trim() || null
+        address: formData.address.trim() || undefined
       }
   
       if (editingSchool) {
@@ -128,7 +130,7 @@ export default function SchoolsManagement() {
       await Promise.all([
         supabase.from('users')
           .update({ school_id: null })
-          .eq('school_id', schoolId),
+          .eq('id', schoolId),
         supabase.from('classes')
           .update({ school_id: null })
           .eq('school_id', schoolId),

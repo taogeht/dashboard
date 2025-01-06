@@ -18,11 +18,12 @@ interface AddTeacherModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
+  schoolId: string | undefined
 }
+
 interface School {
   id: string
   name: string
-  schoolId: string | undefined
 }
 
 
